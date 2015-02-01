@@ -1,0 +1,29 @@
+apply plugin: 'java'
+apply plugin: 'maven'
+sourceCompatibility = 1.8
+
+ext.JETTY_VERSION = "9.2.6.v20141205"
+ext.GSON_VERSION = "2.3.1"
+ext.GUAVA_VERSION = "18.0"
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile "org.eclipse.jetty:jetty-server:$JETTY_VERSION"
+    compile "com.google.code.gson:gson:$GSON_VERSION"
+    compile "com.google.guava:guava:$GUAVA_VERSION"
+    testCompile 'junit:junit:4.12'
+    testCompile 'org.mockito:mockito-all:1.10.19'
+}
+
+
+task run(dependsOn: classes, type: JavaExec) {
+    classpath sourceSets.main.runtimeClasspath
+    main 'ws.danasoft.eventstore.EventStoreServer'
+}
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '2.2.1'
+}

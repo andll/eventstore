@@ -10,6 +10,7 @@ import java.util.*;
 
 public class BTreeNodeTest {
     private static final int MAX_BOUNDARIES = 2;
+    private static final BTreeNodeConfiguration<Long, Long> CONFIGURATION = new BTreeNodeConfiguration<>(MAX_BOUNDARIES, (x) -> 1l);
 
     @Test
     public void insertIntoEmptyTree_returnsLeaf() {
@@ -160,7 +161,7 @@ public class BTreeNodeTest {
             }
             Assert.assertTrue(String.format("Search range %s does not contain key %d", keyRange, key),
                     keyRange.contains(key));
-            Assert.assertEquals("Value at key " + key, btree.getValue().longValue(), key + 1);
+            Assert.assertEquals("Value at key " + key, key + 1, btree.getValue().longValue());
         } else {
             Long prevBoundary = null;
             List<Long> boundaries = btree.getBoundaries();
@@ -188,15 +189,15 @@ public class BTreeNodeTest {
     }
 
     private static BTreeNode<Long, Long> empty() {
-        return BTreeNode.emptyTree(MAX_BOUNDARIES);
+        return BTreeNode.emptyTree(CONFIGURATION);
     }
 
     private static BTreeNode<Long, Long> leaf(long key, long value) {
-        return new BTreeNode<>(MAX_BOUNDARIES, Optional.of(key), Optional.of(value));
+        return new BTreeNode<>(CONFIGURATION, Optional.of(key), value);
     }
 
     private static BTreeNode<Long, Long> tree(ArrayList<Long> boundaries, ArrayList<BTreeNode<Long, Long>> nodes) {
-        return new BTreeNode<>(MAX_BOUNDARIES, boundaries, nodes);
+        return new BTreeNode<>(CONFIGURATION, boundaries, nodes);
     }
 
     private static BTreeNode<Long, Long> twoNodesTree() {

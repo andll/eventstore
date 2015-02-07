@@ -13,20 +13,13 @@ public class AggregationIndexReaderTest {
     private static final int MAX_BOUNDARIES = 2;
     private static final int MIN = 0;
     private static final int MAX = 27;
-    private final Aggregator<Long, Long> aggregator = new Sum<>();
+    private static final Aggregator<Long, Long> AGGREGATOR = new Sum<>();
 
-    private static final BTreeNodeConfiguration<Long, Long> CONFIGURATION = new BTreeNodeConfiguration<>(MAX_BOUNDARIES, (x) -> {
-        long sum = 0;
-
-        for (BTreeNode<Long, Long> node : x.getNodes()) {
-            sum += node.getValue();
-        }
-
-        return sum;
-    }, new LongLongBTreeSerializer());
+    private static final BTreeNodeConfiguration<Long, Long> CONFIGURATION = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
+            new AggregatorValueUpdater<>(AGGREGATOR), new LongLongBTreeSerializer());
 
     private final BTree<Long, Long> tree = BTreeTestHelper.generate(MIN, MAX, CONFIGURATION);
-    private final AggregationIndexReader<Long, Long> reader = new AggregationIndexReader<>(tree, aggregator);
+    private final AggregationIndexReader<Long, Long> reader = new AggregationIndexReader<>(tree, AGGREGATOR);
 
     @Test
     public void rangeWithSingleValue() throws IOException {

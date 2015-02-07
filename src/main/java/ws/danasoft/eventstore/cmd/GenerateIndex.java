@@ -1,6 +1,7 @@
 package ws.danasoft.eventstore.cmd;
 
 import ws.danasoft.eventstore.index.*;
+import ws.danasoft.eventstore.math.Sum;
 
 import java.io.File;
 import java.io.IOException;
@@ -20,15 +21,8 @@ public class GenerateIndex {
         }
         long from = Long.parseLong(args[1]);
         long to = Long.parseLong(args[2]);
-        BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES, (x) -> {
-            long sum = 0;
-
-            for (BTreeNode<Long, Long> node : x.getNodes()) {
-                sum += node.getValue();
-            }
-
-            return sum;
-        }, new LongLongBTreeSerializer());
+        BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
+                new AggregatorValueUpdater<>(new Sum<>()), new LongLongBTreeSerializer());
         RegionMapper regionMapper = new MmapRegionMapper(file.toPath(), configuration.elementSize());
         BTree<Long, Long> bTree = BTree.createNew(configuration, regionMapper);
         for (long i = from; i <= to; i++) {

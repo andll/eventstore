@@ -28,15 +28,8 @@ public class ReadSpeedTest {
             System.err.println("File does not exists");
             System.exit(2);
         }
-        BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES, (x) -> {
-            long sum = 0;
-
-            for (BTreeNode<Long, Long> node : x.getNodes()) {
-                sum += node.getValue();
-            }
-
-            return sum;
-        }, new LongLongBTreeSerializer());
+        BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
+                new AggregatorValueUpdater<>(new Sum<>()), new LongLongBTreeSerializer());
         RegionMapper regionMapper = new FseekRegionMapper(file.toPath(), configuration.elementSize());
         BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
         AggregationIndexReader<Long, Long> aggregationIndexReader = new AggregationIndexReader<>(bTree, new Sum<>());

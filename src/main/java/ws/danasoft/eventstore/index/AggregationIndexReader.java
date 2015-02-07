@@ -1,19 +1,19 @@
 package ws.danasoft.eventstore.index;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Range;
 import ws.danasoft.eventstore.math.Aggregator;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 public class AggregationIndexReader<R, A extends Comparable<A>> {
-    private final BTreeNode<A, R> root;
+    private final BTree<A, R> tree;
     private final Aggregator<R, A> aggregator;
 
-    public AggregationIndexReader(BTreeNode<A, R> root, Aggregator<R, A> aggregator) {
-        this.root = root;
+    public AggregationIndexReader(BTree<A, R> tree, Aggregator<R, A> aggregator) {
+        this.tree = tree;
         this.aggregator = aggregator;
     }
 
@@ -22,19 +22,22 @@ public class AggregationIndexReader<R, A extends Comparable<A>> {
         return result.result;
     }
 
-    @VisibleForTesting
-    EvaluationResult _evaluate(Range<A> range) {
-        return new Evaluation(range).evaluate(root, Range.all());
+    public EvaluationResult _evaluate(Range<A> range) {
+        if (tree.isEmpty()) {
+            return new EvaluationResult(aggregator.aggregateValues(Collections.<A>emptySet()), 0, 0);
+        }
+        return new Evaluation(range).evaluate(tree.getRoot().get(), Range.all());
     }
 
-    @VisibleForTesting
-    class EvaluationResult {
+    public class EvaluationResult {
         private final R result;
         private final int nodesVisited;
+        private final int leafsVisited;
 
-        public EvaluationResult(R result, int nodesVisited) {
+        public EvaluationResult(R result, int nodesVisited, int leafsVisited) {
             this.result = result;
             this.nodesVisited = nodesVisited;
+            this.leafsVisited = leafsVisited;
         }
 
         public R getResult() {
@@ -44,11 +47,16 @@ public class AggregationIndexReader<R, A extends Comparable<A>> {
         public int getNodesVisited() {
             return nodesVisited;
         }
+
+        public int getLeafsVisited() {
+            return leafsVisited;
+        }
     }
 
     private class Evaluation {
         private final Range<A> range;
         private int nodesVisited = 0;
+        private int leafsVisited = 0;
 
         private Evaluation(Range<A> range) {
             this.range = range;
@@ -57,13 +65,20 @@ public class AggregationIndexReader<R, A extends Comparable<A>> {
         private EvaluationResult evaluate(BTreeNode<A, R> node, Range<A> overallRange) {
             R r = _evaluate(node, overallRange);
 
-            return new EvaluationResult(r, nodesVisited);
+            return new EvaluationResult(r, nodesVisited, leafsVisited);
         }
 
         private R _evaluate(BTreeNode<A, R> node, Range<A> overallRange) {
-            nodesVisited++;
+            if (node.isLeaf()) {
+                leafsVisited++;
+                if (range.contains(node.getKey())) {
+                    return aggregator.aggregate(Collections.singleton(node.getValue()));
+                }
+                return aggregator.aggregate(Collections.<R>emptySet());
+            }
             List<BTreeNode<A, R>> nodes = node.getNodes();
             List<R> iterable = new ArrayList<>(nodes.size());
+            nodesVisited++;
             List<A> boundaries = node.getBoundaries();
             A prevBoundary = null;
             for (int i = 0; i < boundaries.size(); i++) {
@@ -79,23 +94,17 @@ public class AggregationIndexReader<R, A extends Comparable<A>> {
                 processRange(iterable, intersection, child);
                 prevBoundary = boundary;
             }
-            if (prevBoundary == null) {
-                if (node.isLeaf()) { //can be empty tree
-                    if (range.contains(node.getKey())) {
-                        iterable.add(node.getValue());
-                    }
-                }
-            } else {
-                Range<A> currentRange = Range.atLeast(prevBoundary);
-                BTreeNode<A, R> child = nodes.get(boundaries.size());
-                processRange(iterable, currentRange.intersection(overallRange), child);
-            }
+            assert prevBoundary != null;
+            Range<A> currentRange = Range.atLeast(prevBoundary);
+            BTreeNode<A, R> child = nodes.get(boundaries.size());
+            processRange(iterable, currentRange.intersection(overallRange), child);
 
             return aggregator.aggregate(iterable);
         }
 
         private void processRange(List<R> iterable, Range<A> currentRange, BTreeNode<A, R> child) {
             if (range.encloses(currentRange)) {
+                nodesVisited++;
                 iterable.add(child.getValue());
             } else if (range.isConnected(currentRange)) {
                 iterable.add(_evaluate(child, currentRange));

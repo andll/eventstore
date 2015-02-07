@@ -21,7 +21,7 @@ public class AggregationIndexReaderSvt {
         }
 
         return sum;
-    });
+    }, new LongLongBTreeSerializer());
 
     private static final long MIN = 0;
     private static final long MAX = 10 * 1000 * 1000;
@@ -33,7 +33,7 @@ public class AggregationIndexReaderSvt {
 
     @Test
     public void indexReferenceComparison() {
-        final BTreeNode<Long, Long> node = measure("generation", () -> generate(MIN, MAX));
+        final BTree<Long, Long> node = measure("generation", () -> BTreeTestHelper.generate(MIN, MAX, CONFIGURATION));
         long fromIncluding = 100 * 10 * 1000;
         long toExcluding = 810 * 10 * 1000;
         Long reference = measure("reference calculation", () -> sum(fromIncluding, toExcluding));
@@ -53,14 +53,6 @@ public class AggregationIndexReaderSvt {
             sum += i;
         }
         return sum;
-    }
-
-    private BTreeNode<Long, Long> generate(long from, long to) {
-        BTreeNode<Long, Long> root = BTreeNode.emptyTree(CONFIGURATION);
-        for (long l = from; l <= to; l++) {
-            root = root.add(l, l);
-        }
-        return root;
     }
 
     private static <T> T measure(String name, Supplier<T> supplier) {

@@ -23,10 +23,10 @@ public class AggregationIndexReaderTest {
         }
 
         return sum;
-    });
+    }, new LongLongBTreeSerializer());
 
-    private final BTreeNode<Long, Long> node = generate(MIN, MAX);
-    private final AggregationIndexReader<Long, Long> reader = new AggregationIndexReader<>(node, aggregator);
+    private final BTree<Long, Long> tree = BTreeTestHelper.generate(MIN, MAX, CONFIGURATION);
+    private final AggregationIndexReader<Long, Long> reader = new AggregationIndexReader<>(tree, aggregator);
 
     @Test
     public void rangeWithSingleValue() throws IOException {
@@ -81,13 +81,5 @@ public class AggregationIndexReaderTest {
             }
         }
         return sum;
-    }
-
-    private BTreeNode<Long, Long> generate(long from, long to) {
-        BTreeNode<Long, Long> root = BTreeNode.emptyTree(CONFIGURATION);
-        for (long l = from; l <= to; l++) {
-            root = root.add(l, l);
-        }
-        return root;
     }
 }

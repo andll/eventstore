@@ -7,8 +7,10 @@ import java.util.function.Function;
 public class BTreeNodeConfiguration<K extends Comparable<K>, V> {
     private final int maxBoundaries;
     private final Function<BTreeNode<K, V>, V> valueUpdater;
+    private final BTreeSerializer<K, V> serializer;
 
-    public BTreeNodeConfiguration(int maxBoundaries, Function<BTreeNode<K, V>, V> valueUpdater) {
+    public BTreeNodeConfiguration(int maxBoundaries, Function<BTreeNode<K, V>, V> valueUpdater, BTreeSerializer<K, V> serializer) {
+        this.serializer = serializer;
         Preconditions.checkArgument(maxBoundaries > 1, "maxBoundaries can not be less then 1");
         Preconditions.checkArgument(maxBoundaries % 2 == 0, "maxBoundaries must be odd");
 
@@ -16,8 +18,48 @@ public class BTreeNodeConfiguration<K extends Comparable<K>, V> {
         this.valueUpdater = valueUpdater;
     }
 
+    public int elementSize() {
+        int keySize = serializer.keySize();
+        int valueSize = serializer.valueSize();
+        int referenceSize = 8;
+        return keySize + valueSize + keySize * (boundariesCapacity()) + referenceSize * nodesCapacity();
+    }
+
+    public int keyPosition() {
+        return 0;
+    }
+
+    public int valuePosition() {
+        return serializer.keySize();
+    }
+
+    public int boundariesPosition() {
+        int keySize = serializer.keySize();
+        int valueSize = serializer.valueSize();
+        return keySize + valueSize;
+    }
+
+    public int nodesPosition() {
+        int keySize = serializer.keySize();
+        int valueSize = serializer.valueSize();
+        return keySize + valueSize + keySize * (boundariesCapacity());
+    }
+
+    public int boundariesCapacity() {
+        return getMaxBoundaries() + 1;
+    }
+
+    //1 more because our alg first adds new element and then splits
+    public int nodesCapacity() {
+        return getMaxBoundaries() + 2;
+    }
+
     public int getMaxBoundaries() {
         return maxBoundaries;
+    }
+
+    public BTreeSerializer<K, V> getSerializer() {
+        return serializer;
     }
 
     public Function<BTreeNode<K, V>, V> getValueUpdater() {

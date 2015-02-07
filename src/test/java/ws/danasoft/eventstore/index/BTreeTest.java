@@ -8,71 +8,10 @@ import org.junit.Test;
 
 import java.util.*;
 
-public class BTreeNodeTest {
+public class BTreeTest {
     private static final int MAX_BOUNDARIES = 2;
-    private static final BTreeNodeConfiguration<Long, Long> CONFIGURATION = new BTreeNodeConfiguration<>(MAX_BOUNDARIES, (x) -> 1l);
-
-    @Test
-    public void insertIntoEmptyTree_returnsLeaf() {
-        BTreeNode<Long, Long> add = empty().add(1l, 2l);
-        Assert.assertEquals(leaf(1l, 2l), add);
-    }
-
-    @Test
-    public void insertIntoLeafSameKey_returnsNewLeaf() {
-        BTreeNode<Long, Long> add = leaf(1, 2).add(1l, 3l);
-        Assert.assertEquals(leaf(1l, 3l), add);
-    }
-
-    @Test
-    public void insertIntoLeafNewLowerKey_returnsNewTree() {
-        BTreeNode<Long, Long> add = leaf(1, 2).add(3l, 4l);
-        Assert.assertEquals(twoNodesTree(), add);
-    }
-
-    @Test
-    public void insertIntoLeafNewGreaterKey_returnsNewTree() {
-        BTreeNode<Long, Long> add = leaf(3, 4).add(1l, 2l);
-        Assert.assertEquals(twoNodesTree(), add);
-    }
-
-    @Test
-    public void insertLowerExistingKeyToTree_modifiesTree() {
-        BTreeNode<Long, Long> old = twoNodesTree();
-        BTreeNode<Long, Long> add = old.add(1l, 10l);
-        Assert.assertEquals(tree(boundaries(3l), nodes(leaf(1, 10), leaf(3, 4))), add);
-    }
-
-    @Test
-    public void insertUpperExistingKeyToTree_modifiesTree() {
-        BTreeNode<Long, Long> old = twoNodesTree();
-        BTreeNode<Long, Long> add = old.add(3l, 10l);
-        Assert.assertEquals(tree(boundaries(3l), nodes(leaf(1, 2), leaf(3, 10))), add);
-    }
-
-    @Test
-    public void insertOneMoreKeyLowerThenAll_modifiesTree() {
-        BTreeNode<Long, Long> old = twoNodesTree();
-        BTreeNode<Long, Long> add = old.add(0l, 1l);
-        Assert.assertSame(old, add);
-        Assert.assertEquals(tree(boundaries(1l, 3l), nodes(leaf(0, 1), leaf(1, 2), leaf(3, 4))), add);
-    }
-
-    @Test
-    public void insertOneMoreKeyBetweenExisting_modifiesTree() {
-        BTreeNode<Long, Long> old = twoNodesTree();
-        BTreeNode<Long, Long> add = old.add(2l, 3l);
-        Assert.assertSame(old, add);
-        Assert.assertEquals(tree(boundaries(2l, 3l), nodes(leaf(1, 2), leaf(2, 3), leaf(3, 4))), add);
-    }
-
-    @Test
-    public void insertOneMoreKeyGreaterThenAll_modifiesTree() {
-        BTreeNode<Long, Long> old = twoNodesTree();
-        BTreeNode<Long, Long> add = old.add(4l, 5l);
-        Assert.assertSame(old, add);
-        Assert.assertEquals(tree(boundaries(3l, 4l), nodes(leaf(1, 2), leaf(3, 4), leaf(4, 5))), add);
-    }
+    private static final BTreeNodeConfiguration<Long, Long> CONFIGURATION = new BTreeNodeConfiguration<>(MAX_BOUNDARIES, (x) -> 1l,
+            new LongLongBTreeSerializer());
 
     @Test
     public void twoElementsTest() {
@@ -124,27 +63,27 @@ public class BTreeNodeTest {
     }
 
     private void checkPermutation(List<Long> permutation, boolean onlyFinal) {
-        BTreeNode<Long, Long> root = empty();
+        BTree<Long, Long> btree = BTreeTestHelper.empty(CONFIGURATION);
         Set<Long> expectedKeys = new LinkedHashSet<>();
         try {
             for (Long e : permutation) {
-                root = root.add(e, e + 1);
+                btree.put(e, e + 1);
                 expectedKeys.add(e);
                 if (!onlyFinal) {
-                    assertValidSearchTree(root, expectedKeys);
+                    assertValidSearchTree(btree, expectedKeys);
                 }
             }
             if (onlyFinal) {
-                assertValidSearchTree(root, expectedKeys);
+                assertValidSearchTree(btree, expectedKeys);
             }
         } catch (Throwable th) {
-            throw new AssertionError("Failed to evaluate permutation " + expectedKeys + " tree: " + root, th);
+            throw new AssertionError("Failed to evaluate permutation " + expectedKeys + " tree: " + btree, th);
         }
     }
 
-    private static void assertValidSearchTree(BTreeNode<Long, Long> btree, Set<Long> expectedKeys) {
+    private static void assertValidSearchTree(BTree<Long, Long> btree, Set<Long> expectedKeys) {
         HashSet<Long> allKeys = new HashSet<>();
-        assertValidSearchTree(btree, Range.<Long>all(), allKeys, 0, expectedKeys.size());
+        assertValidSearchTree(btree.getRoot().get(), Range.<Long>all(), allKeys, 0, expectedKeys.size());
         Assert.assertEquals("Tree keys", allKeys, expectedKeys);
     }
 
@@ -188,35 +127,36 @@ public class BTreeNodeTest {
         return Math.log(x) / Math.log(MAX_BOUNDARIES);
     }
 
-    private static BTreeNode<Long, Long> empty() {
-        return BTreeNode.emptyTree(CONFIGURATION);
-    }
-
-    private static BTreeNode<Long, Long> leaf(long key, long value) {
-        return new BTreeNode<>(CONFIGURATION, Optional.of(key), value);
-    }
-
-    private static BTreeNode<Long, Long> tree(ArrayList<Long> boundaries, ArrayList<BTreeNode<Long, Long>> nodes) {
-        return new BTreeNode<>(CONFIGURATION, boundaries, nodes);
-    }
-
-    private static BTreeNode<Long, Long> twoNodesTree() {
-        return tree(boundaries(3l), nodes(leaf(1, 2), leaf(3, 4)));
-    }
-
-    public static ArrayList<Long> boundaries(long... x) {
-        ArrayList<Long> r = new ArrayList<>(x.length);
-        for (long v : x) {
-            r.add(v);
-        }
-        return r;
-    }
-
-    public static ArrayList<BTreeNode<Long, Long>> nodes(BTreeNode<Long, Long>... x) {
-        ArrayList<BTreeNode<Long, Long>> r = new ArrayList<>(x.length);
-        for (BTreeNode<Long, Long> v : x) {
-            r.add(v);
-        }
-        return r;
-    }
+    //
+//    private static BTreeNode<Long, Long> leaf(long key, long value) {
+//        return new BTreeNode<>(CONFIGURATION, regionMapper, buffer, Optional.of(key), value);
+//    }
+//
+//    private static BTreeNode<Long, Long> tree(ArrayList<Long> boundaries, ArrayList<BTreeNode<Long, Long>> nodes) {
+//        return new BTreeNode<>(CONFIGURATION, regionMapper, buffer, boundaries, nodes);
+//    }
+//
+//    private static BTree<Long, Long> tree(BTreeNode<Long, Long> root) {
+//        return new BTree<>(root);
+//    }
+//
+//    private static BTree<Long, Long> twoNodesTree() {
+//        return tree(tree(boundaries(3l), nodes(leaf(1, 2), leaf(3, 4))));
+//    }
+//
+//    public static ArrayList<Long> boundaries(long... x) {
+//        ArrayList<Long> r = new ArrayList<>(x.length);
+//        for (long v : x) {
+//            r.add(v);
+//        }
+//        return r;
+//    }
+//
+//    public static ArrayList<BTreeNode<Long, Long>> nodes(BTreeNode<Long, Long>... x) {
+//        ArrayList<BTreeNode<Long, Long>> r = new ArrayList<>(x.length);
+//        for (BTreeNode<Long, Long> v : x) {
+//            r.add(v);
+//        }
+//        return r;
+//    }
 }

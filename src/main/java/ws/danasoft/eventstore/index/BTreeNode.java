@@ -4,101 +4,156 @@ import com.google.gson.stream.JsonWriter;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import java.lang.ref.Reference;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Supplier;
 
 /**
  * Class is not thread safe
  */
 public class BTreeNode<K extends Comparable<K>, V> {
-    private static final boolean ASSERT_ENABLED = BTreeNode.class.desiredAssertionStatus();
     private final BTreeNodeConfiguration<K, V> configuration;
-    private final List<K> boundaries;
-    private final List<BTreeNode<K, V>> nodes;
+    private final RegionMapper regionMapper;
+    private final MappedRegion buffer;
+    private final long position;
 
-    private Optional<K> key;
-    private V value;
+    private final Lazy<Optional<K>> key;
+    private final Lazy<V> value;
+    private final Lazy<List<K>> boundaries;
+    private final Lazy<List<BTreeNode<K, V>>> nodes;
 
-    protected BTreeNode(BTreeNodeConfiguration<K, V> configuration, Optional<K> key, V value) {
-        this.key = key;
-        this.value = value;
+    protected BTreeNode(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, MappedRegion buffer, long position) {
+        this.regionMapper = regionMapper;
+        this.buffer = buffer;
         this.configuration = configuration;
-        this.boundaries = Collections.emptyList();
-        this.nodes = Collections.emptyList();
-        validate(configuration, boundaries, nodes);
+        this.position = position;
+        key = new Lazy<>(() -> {
+            buffer.position(configuration.keyPosition());
+            return configuration.getSerializer().readKey(buffer);
+        });
+        value = new Lazy<>(() -> {
+            buffer.position(configuration.valuePosition());
+            return configuration.getSerializer().readValue(buffer);
+        });
+        boundaries = new Lazy<>(this::_getBoundaries);
+        nodes = new Lazy<>(this::_getNodes);
     }
 
-    protected BTreeNode(BTreeNodeConfiguration<K, V> configuration, List<K> boundaries, List<BTreeNode<K, V>> nodes) {
-        this.key = Optional.empty();
-        validate(configuration, boundaries, nodes);
-        this.configuration = configuration;
-        this.boundaries = boundaries;
-        this.nodes = nodes;
-        nodeChanged();
+    protected static <K extends Comparable<K>, V> BTreeNode<K, V> map(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, long position) {
+        MappedRegion region = regionMapper.mapRegion(position);
+        return new BTreeNode<>(configuration, regionMapper, region, position);
     }
 
-    public static <K extends Comparable<K>, V> BTreeNode<K, V> emptyTree(BTreeNodeConfiguration<K, V> configuration) {
-        return new BTreeNode<K, V>(configuration, new ArrayList<>(boundariesCapacity(configuration)), new ArrayList<>(nodesCapacity(configuration)));
+    /**
+     * assumes {@link FseekRegionMapper#mapRegion(long)} returns buffer with position 0
+     * assumes {@link BTreeNodeConfiguration#keyPosition()} is 0
+     */
+    protected static <K extends Comparable<K>, V> BTreeNode<K, V> allocateNode(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper) {
+        long position = regionMapper.allocateRegion();
+        MappedRegion region = regionMapper.mapRegion(position);
+        BTreeSerializer<K, V> serializer = configuration.getSerializer();
+        serializer.writeKey(Optional.empty(), region);
+        region.putLong(configuration.boundariesPosition(), LongLongBTreeSerializer.NO_VALUE);
+        region.putLong(configuration.nodesPosition(), LongLongBTreeSerializer.NO_VALUE);
+        region.flush();
+        return new BTreeNode<>(configuration, regionMapper, region, position);
     }
 
-    //1 more because our alg first adds new element and then splits
-    private static int nodesCapacity(BTreeNodeConfiguration configuration) {
-        return configuration.getMaxBoundaries() + 2;
-    }
-
-    private static int boundariesCapacity(BTreeNodeConfiguration configuration) {
-        return configuration.getMaxBoundaries() + 1;
+    /**
+     * assumes {@link FseekRegionMapper#mapRegion(long)} returns buffer with position 0
+     * assumes {@link BTreeNodeConfiguration#keyPosition()} is 0
+     * assumes {@link BTreeNodeConfiguration#valuePosition()} is keyPosition + valueSize
+     */
+    protected static <K extends Comparable<K>, V> BTreeNode<K, V> allocateLeaf(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, K key, V value) {
+        long position = regionMapper.allocateRegion();
+        MappedRegion region = regionMapper.mapRegion(position);
+        BTreeSerializer<K, V> serializer = configuration.getSerializer();
+        serializer.writeKey(Optional.of(key), region);
+        serializer.writeValue(value, region);
+        region.putLong(configuration.boundariesPosition(), LongLongBTreeSerializer.NO_VALUE);
+        region.putLong(configuration.nodesPosition(), LongLongBTreeSerializer.NO_VALUE);
+        region.flush();
+        return new BTreeNode<>(configuration, regionMapper, region, position);
     }
 
     public final List<K> getBoundaries() {
-        return Collections.unmodifiableList(boundaries);
+        return Collections.unmodifiableList(boundaries.get());
+    }
+
+    private List<K> _getBoundaries() {
+        List<K> boundaries = new ArrayList<>(configuration.boundariesCapacity());
+        buffer.position(configuration.boundariesPosition());
+        BTreeSerializer<K, V> serializer = configuration.getSerializer();
+        Optional<K> key;
+        while ((key = serializer.readKey(buffer)).isPresent()) {
+            boundaries.add(key.get());
+            if (boundaries.size() == configuration.boundariesCapacity()) {
+                break;
+            }
+        }
+        return boundaries;
     }
 
     public final List<BTreeNode<K, V>> getNodes() {
-        return Collections.unmodifiableList(nodes);
+        return Collections.unmodifiableList(nodes.get());
+    }
+
+    private List<BTreeNode<K, V>> _getNodes() {
+        List<BTreeNode<K, V>> nodes = new ArrayList<>(configuration.nodesCapacity());
+        buffer.position(configuration.nodesPosition());
+        Optional<Long> reference;
+        while ((reference = LongLongBTreeSerializer.readOptionalLong(buffer)).isPresent()) {
+            nodes.add(map(configuration, regionMapper, reference.get()));
+            if (nodes.size() == configuration.nodesCapacity()) {
+                break;
+            }
+        }
+        return nodes;
+    }
+
+    BTreeNode<K, V> add(K key, V value) {
+        Optional<KeyNodePair<K, V>> o = _add(key, value);
+        if (!o.isPresent()) {
+            return this;
+        }
+        BTreeNode<K, V> b = o.get().node;
+        assert lowerKey().compareTo(b.lowerKey()) < 0 :
+                "Can not compose new node from keys " + lowerKey() + "," + b.lowerKey();
+        BTreeNode<K, V> node = allocateNode(configuration, regionMapper);
+        BTreeSerializer<K, V> serializer = configuration.getSerializer();
+        node.buffer.position(configuration.boundariesPosition());
+        serializer.writeKey(Optional.of(o.get().key), node.buffer);
+        serializer.writeKey(Optional.empty(), node.buffer);
+        node.buffer.position(configuration.nodesPosition());
+        node.buffer.putLong(this.position);
+        node.buffer.putLong(b.position);
+        node.buffer.putLong(LongLongBTreeSerializer.NO_VALUE);
+        node.buffer.flush();
+        return node;
     }
 
     //TODO optimisation for append
-    public BTreeNode<K, V> add(K key, V value) {
-        Optional<KeyNodePair<K, V>> o = _add(key, value);
-        if (o.isPresent()) {
-            BTreeNode<K, V> b = o.get().node;
-            assert lowerKey().compareTo(b.lowerKey()) < 0 :
-                    "Can not compose new node from keys " + lowerKey() + "," + b.lowerKey();
-            ArrayList<K> newBoundaries = new ArrayList<>(boundariesCapacity(configuration));
-            newBoundaries.add(o.get().key);
-            ArrayList<BTreeNode<K, V>> newNodes = new ArrayList<>(nodesCapacity(configuration));
-            newNodes.add(this);
-            newNodes.add(b);
-            return new BTreeNode<>(configuration, newBoundaries, newNodes);
-        } else {
-            return this;
-        }
-    }
-
-    public Optional<KeyNodePair<K, V>> _add(K newKey, V newValue) {
-        if (boundaries.isEmpty()) { //Leaf or empty node
-            if (this.key.isPresent()) { //leaf
-                K thisKey = this.key.get();
-                if (thisKey.equals(newKey)) {
-                    this.value = newValue;
-                    return Optional.empty();
-                }
-                if (thisKey.compareTo(newKey) < 0) {
-                    return Optional.of(new KeyNodePair<>(newKey, newLeaf(newKey, newValue)));
-                }
-                Optional<KeyNodePair<K, V>> r = Optional.of(new KeyNodePair<>(thisKey, newLeaf(thisKey, this.value)));
-                this.key = Optional.of(newKey);
-                this.value = newValue;
-                return r;
+    private Optional<KeyNodePair<K, V>> _add(K newKey, V newValue) {
+        if (isLeaf()) {
+            K thisKey = key.get().get();
+            if (thisKey.equals(newKey)) {
+                setValue(newValue);
+                return Optional.empty();
             }
-            //empty node
-            this.key = Optional.of(newKey);
-            this.value = newValue;
-            return Optional.empty();
+            if (thisKey.compareTo(newKey) < 0) {
+                return Optional.of(new KeyNodePair<>(newKey, newLeaf(newKey, newValue)));
+            }
+            Optional<KeyNodePair<K, V>> r = Optional.of(new KeyNodePair<>(thisKey, newLeaf(thisKey, value.get())));
+            setKey(newKey);
+            setValue(newValue);
+            return r;
         }
+        List<K> boundaries = this.boundaries.get();
+        List<BTreeNode<K, V>> nodes = this.nodes.get();
         int keySearch = Collections.binarySearch(boundaries, newKey);
         int nodePosition;
         if (keySearch < 0) {
@@ -135,55 +190,72 @@ public class BTreeNode<K extends Comparable<K>, V> {
 
             int middleIndex = boundaries.size() / 2 + 1;
             K middleKey = boundaries.get(middleIndex - 1);
-            ArrayList<K> newBoundaries = new ArrayList<>(boundariesCapacity(configuration));
+            ArrayList<K> newBoundaries = new ArrayList<>(configuration.boundariesCapacity());
             newBoundaries.addAll(boundaries.subList(middleIndex, boundaries.size()));
             boundaries.subList(middleIndex - 1, boundaries.size()).clear();
-            ArrayList<BTreeNode<K, V>> newNodes = new ArrayList<>(nodesCapacity(configuration));
-            List<BTreeNode<K, V>> nodesLeftHalf = nodes.subList(nodes.size() / 2, nodes.size());
+            ArrayList<BTreeNode<K, V>> newNodes = new ArrayList<>(configuration.nodesCapacity());
+            List<BTreeNode<K, V>> nodesLeftHalf = nodes.subList(middleIndex, nodes.size());
             newNodes.addAll(nodesLeftHalf);
             nodesLeftHalf.clear();
-            result = Optional.of(new KeyNodePair<>(middleKey, new BTreeNode<K, V>(configuration, newBoundaries, newNodes)));
+            BTreeNode<K, V> splitTo = allocateNode(configuration, regionMapper);
+            splitTo.boundaries.reset(newBoundaries);
+            splitTo.nodes.reset(newNodes);
+            splitTo.flushNodesAndBoundaries(newBoundaries, newNodes);
+            result = Optional.of(new KeyNodePair<>(middleKey, splitTo));
         } else {
             result = Optional.empty();
         }
 
-        if (ASSERT_ENABLED) {
-            try {
-                validate(configuration, boundaries, nodes);
-            } catch (IllegalArgumentException e) {
-                throw new AssertionError(e.getMessage());
-            }
-        }
+        flushNodesAndBoundaries(boundaries, nodes);
 
         nodeChanged();
         return result;
     }
 
+    private void flushNodesAndBoundaries(List<K> boundaries, List<BTreeNode<K, V>> nodes) {
+        BTreeSerializer<K, V> serializer = configuration.getSerializer();
+
+        int i;
+        buffer.position(configuration.boundariesPosition());
+        for (i = 0; i < boundaries.size(); i++) {
+            serializer.writeKey(Optional.of(boundaries.get(i)), buffer);
+        }
+        if (i < configuration.boundariesCapacity()) {
+            serializer.writeKey(Optional.empty(), buffer);
+        }
+
+        buffer.position(configuration.nodesPosition());
+        for (i = 0; i < nodes.size(); i++) {
+            buffer.putLong(nodes.get(i).position);
+        }
+        if (i < configuration.nodesCapacity()) {
+            buffer.putLong(LongLongBTreeSerializer.NO_VALUE);
+        }
+        buffer.flush();
+    }
+
     private BTreeNode<K, V> newLeaf(K key, V value) {
-        return new BTreeNode<>(configuration, Optional.of(key), value);
+        return allocateLeaf(configuration, regionMapper, key, value);
     }
 
     public boolean isLeaf() {
-        return key.isPresent();
+        return key.get().isPresent();
     }
 
     public K getKey() {
-        return key.orElseThrow(() -> new IllegalStateException("Node is not a leaf"));
+        return key.get().orElseThrow(() -> new IllegalStateException("Node is not a leaf"));
     }
 
     public V getValue() {
-        return value;
+        return value.get();
     }
 
     private K lowerKey() {
-        return key.orElseGet(() -> boundaries.get(0));
+        return key.get().orElseGet(() -> boundaries.get().get(0));
     }
 
     private static <K extends Comparable<K>, V> void validate(BTreeNodeConfiguration configuration, List<K> boundaries,
                                                               List<BTreeNode<K, V>> nodes) throws IllegalArgumentException {
-        if (nodes.isEmpty() && boundaries.isEmpty()) {
-            return;
-        }
         if (boundaries.size() > configuration.getMaxBoundaries()) {
             throw new IllegalArgumentException(String.format("Boundaries size %d is bigger then limit %d",
                     boundaries.size(), configuration.getMaxBoundaries()));
@@ -208,38 +280,32 @@ public class BTreeNode<K extends Comparable<K>, V> {
     private void nodeChanged() {
         assert !isLeaf();
 
-        this.value = configuration.getValueUpdater().apply(this);
+        setValue(configuration.getValueUpdater().apply(this));
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-
-        BTreeNode bTreeNode = (BTreeNode) o;
-
-        if (!configuration.equals(bTreeNode.configuration)) return false;
-        if (!boundaries.equals(bTreeNode.boundaries)) return false;
-        if (!key.equals(bTreeNode.key)) return false;
-        if (!nodes.equals(bTreeNode.nodes)) return false;
-        if (!value.equals(bTreeNode.value)) return false;
-
-        return true;
+    private void setValue(V v) {
+        buffer.position(configuration.valuePosition());
+        configuration.getSerializer().writeValue(v, buffer);
+        buffer.flush();
+        value.reset(v);
     }
 
-    @Override
-    public int hashCode() {
-        int result = configuration.hashCode();
-        result = 31 * result + boundaries.hashCode();
-        result = 31 * result + nodes.hashCode();
-        result = 31 * result + key.hashCode();
-        result = 31 * result + value.hashCode();
-        return result;
+    private void setKey(K k) {
+        Optional<K> newKey = Optional.of(k);
+        buffer.position(configuration.keyPosition());
+        configuration.getSerializer().writeKey(newKey, buffer);
+        buffer.flush();
+        key.reset(newKey);
     }
 
     public void printTo(JsonWriter jsonWriter) throws IOException {
+        List<BTreeNode<K, V>> nodes = this.nodes.get();
+        List<K> boundaries = this.boundaries.get();
         jsonWriter.beginObject();
+        V value = this.value.get();
+        jsonWriter.name("_position").value(position);
         if (isLeaf()) {
+            Optional<K> key = this.key.get();
             jsonWriter.name(key.get().toString()).value(value.toString());
         } else {
             jsonWriter.name("_agg").value(value.toString());
@@ -276,6 +342,59 @@ public class BTreeNode<K extends Comparable<K>, V> {
         public KeyNodePair(K key, BTreeNode<K, V> node) {
             this.key = key;
             this.node = node;
+        }
+    }
+
+    long getPosition() {
+        return position;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        BTreeNode bTreeNode = (BTreeNode) o;
+
+        if (position != bTreeNode.position) return false;
+        if (!configuration.equals(bTreeNode.configuration)) return false;
+        if (!regionMapper.equals(bTreeNode.regionMapper)) return false;
+
+        return true;
+    }
+
+    @Override
+    public int hashCode() {
+        int result = configuration.hashCode();
+        result = 31 * result + regionMapper.hashCode();
+        result = 31 * result + (int) (position ^ (position >>> 32));
+        return result;
+    }
+
+    private static class Lazy<T> {
+        private final Supplier<T> supplier;
+        private Reference<T> t = newReference(null);
+
+        public Lazy(Supplier<T> supplier) {
+            this.supplier = supplier;
+        }
+
+        public T get() {
+            T _t = t.get();
+            if (_t != null) {
+                return _t;
+            }
+            _t = supplier.get();
+            t = newReference(_t);
+            return _t;
+        }
+
+        public void reset(T _t) {
+            t = newReference(_t);
+        }
+
+        private Reference<T> newReference(T _t) {
+            return new WeakReference<>(_t);
         }
     }
 }

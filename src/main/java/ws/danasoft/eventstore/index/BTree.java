@@ -2,6 +2,7 @@ package ws.danasoft.eventstore.index;
 
 import com.google.common.base.Preconditions;
 
+import java.util.Collections;
 import java.util.Optional;
 
 public class BTree<K extends Comparable<K>, V> {
@@ -56,6 +57,28 @@ public class BTree<K extends Comparable<K>, V> {
 
     public boolean isEmpty() {
         return !root.isPresent();
+    }
+
+    public Optional<BTreeNode<K, V>> lookup(K key) {
+        return lookup(root.get(), key);
+    }
+
+    private Optional<BTreeNode<K, V>> lookup(BTreeNode<K, V> node, K key) {
+        if (node.isLeaf()) {
+            if (node.getKey().equals(key)) {
+                return Optional.of(node);
+            }
+            return Optional.empty();
+        }
+        int search = Collections.binarySearch(node.getBoundaries(), key);
+        int position;
+        if (search < 0) {
+            position = -(search + 1);
+        } else {
+            position = search + 1;
+        }
+
+        return lookup(node.getNode(position), key);
     }
 
     @Override

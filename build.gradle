@@ -11,6 +11,7 @@ repositories {
 }
 
 dependencies {
+    compile "org.eclipse.jetty:jetty-server:$JETTY_VERSION"
     compile "com.google.code.gson:gson:$GSON_VERSION"
     compile "com.google.guava:guava:$GUAVA_VERSION"
     testCompile 'junit:junit:4.12'

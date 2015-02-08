@@ -21,7 +21,7 @@ public class BTreeNodeConfiguration<K extends Comparable<K>, V> {
     public int elementSize() {
         int keySize = serializer.keySize();
         int valueSize = serializer.valueSize();
-        int referenceSize = 8;
+        int referenceSize = nodeReferenceSize();
         return keySize + valueSize + keySize * (boundariesCapacity()) + referenceSize * nodesCapacity();
     }
 
@@ -43,6 +43,17 @@ public class BTreeNodeConfiguration<K extends Comparable<K>, V> {
         int keySize = serializer.keySize();
         int valueSize = serializer.valueSize();
         return keySize + valueSize + keySize * (boundariesCapacity());
+    }
+
+    public int nodePosition(int index) {
+        int keySize = serializer.keySize();
+        int valueSize = serializer.valueSize();
+        int referenceSize = nodeReferenceSize();
+        return keySize + valueSize + keySize * (boundariesCapacity()) + index * referenceSize;
+    }
+
+    private int nodeReferenceSize() {
+        return 8;
     }
 
     public int boundariesCapacity() {

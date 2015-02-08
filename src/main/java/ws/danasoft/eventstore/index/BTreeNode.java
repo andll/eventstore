@@ -115,6 +115,13 @@ public class BTreeNode<K extends Comparable<K>, V> {
         return nodes;
     }
 
+    //TODO getNodes(i) should be == getNodes().get(i) for writable nodes
+    public BTreeNode<K, V> getNode(int index) {
+        buffer.position(configuration.nodePosition(index));
+        Optional<Long> reference = LongLongBTreeSerializer.readOptionalLong(buffer);
+        return map(configuration, regionMapper, reference.get());
+    }
+
     BTreeNode<K, V> add(K key, V value) {
         Optional<KeyNodePair<K, V>> o = _add(key, value);
         if (!o.isPresent()) {
@@ -188,7 +195,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
             assert boundaries.size() % 2 == 1;
             assert nodes.size() % 2 == 0;
 
-            int middleIndex = boundaries.size() / 2 + 1;
+            int middleIndex = boundaries.size() - 1;
             K middleKey = boundaries.get(middleIndex - 1);
             ArrayList<K> newBoundaries = new ArrayList<>(configuration.boundariesCapacity());
             newBoundaries.addAll(boundaries.subList(middleIndex, boundaries.size()));

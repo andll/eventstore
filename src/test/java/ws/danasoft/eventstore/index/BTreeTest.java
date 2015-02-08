@@ -44,6 +44,22 @@ public class BTreeTest {
     }
 
     @Test
+    public void testLookup() {
+        BTree<Long, Long> btree = BTreeTestHelper.empty(CONFIGURATION);
+        long count = 100;
+        for (long i = 0; i < count; i++) {
+            btree.put(i, i);
+        }
+        for (long i = 0; i < count; i++) {
+            Optional<BTreeNode<Long, Long>> lookup = btree.lookup(i);
+            Assert.assertTrue("Can not find element at " + i, lookup.isPresent());
+            Assert.assertEquals(i, lookup.get().getValue().longValue());
+        }
+        Assert.assertFalse(btree.lookup(-1l).isPresent());
+        Assert.assertFalse(btree.lookup(count + 1l).isPresent());
+    }
+
+    @Test
     public void thousandElements_RandomPermutationsTest() {
         List<Long> data = new ArrayList<>();
         for (long i = 0; i < 1000; i++) {

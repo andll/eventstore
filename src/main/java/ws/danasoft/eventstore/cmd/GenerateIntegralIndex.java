@@ -25,14 +25,18 @@ public class GenerateIntegralIndex {
                 (x) -> 0l, new LongLongBTreeSerializer());
         RegionMapper regionMapper = new MmapRegionMapper(file.toPath(), configuration.elementSize());
         BTree<Long, Long> bTree = BTree.createNew(configuration, regionMapper);
+        generateTo(from, to, bTree);
+        regionMapper.close();
+    }
+
+    public static void generateTo(long from, long to, BTree<Long, Long> bTree) {
         long sum = 0;
         final Random random = new Random();
         for (long i = from; i <= to; i++) {
-            long p = (long) (f(i * 7. / to) * (100 + random.nextGaussian() * 10));
+            long p = (long) (f(i * 7. / to) * (100 + random.nextGaussian() * 50));
             sum += p;
             bTree.put(i, sum);
         }
-        regionMapper.close();
     }
 
     private static double f(double x) {

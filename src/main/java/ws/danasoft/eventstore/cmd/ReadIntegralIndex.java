@@ -33,7 +33,7 @@ public class ReadIntegralIndex {
         }
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 (x) -> 0l, new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new FseekRegionMapper(file.toPath(), configuration.elementSize());
+        RegionMapper regionMapper = new FseekRegionMapper(file.toPath());
         BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
         Optional<BTreeNode<Long, Long>> nodeFrom = bTree.lookup(from - 1);
         Optional<BTreeNode<Long, Long>> nodeTo = bTree.lookup(to);

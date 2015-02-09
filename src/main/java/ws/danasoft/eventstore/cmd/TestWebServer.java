@@ -30,7 +30,7 @@ public class TestWebServer {
         }
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 (x) -> 0l, new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new FseekRegionMapper(file.toPath(), configuration.elementSize());
+        RegionMapper regionMapper = new FseekRegionMapper(file.toPath());
         BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
         Server server = new Server(port);
         server.setHandler(new AbstractHandler() {

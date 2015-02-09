@@ -18,11 +18,17 @@ public class BTreeNodeConfiguration<K extends Comparable<K>, V> {
         this.valueUpdater = valueUpdater;
     }
 
-    public int elementSize() {
+    public int nodeSize() {
         int keySize = serializer.keySize();
         int valueSize = serializer.valueSize();
         int referenceSize = nodeReferenceSize();
         return keySize + valueSize + keySize * (boundariesCapacity()) + referenceSize * nodesCapacity();
+    }
+
+    public int leafSize() {
+        int keySize = serializer.keySize();
+        int valueSize = serializer.valueSize();
+        return keySize + valueSize;
     }
 
     public int keyPosition() {

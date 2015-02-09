@@ -6,6 +6,8 @@ import java.util.Collections;
 import java.util.Optional;
 
 public class BTree<K extends Comparable<K>, V> {
+    private static final int HEADER_SIZE = 8;
+    private static final int HEADER_POSITION = 0;
     private final BTreeNodeConfiguration<K, V> configuration;
     private final RegionMapper regionMapper;
     private final MappedRegion rootPositionHolderBuffer;
@@ -18,18 +20,18 @@ public class BTree<K extends Comparable<K>, V> {
     }
 
     public static <K extends Comparable<K>, V> BTree<K, V> createNew(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper) {
-        long rootRegion = regionMapper.allocateRegion();
-        Preconditions.checkState(rootRegion == 0, "regionMapper returned illegal root region");
-        MappedRegion rootBuffer = regionMapper.mapRegion(rootRegion);
+        long rootRegion = regionMapper.allocateRegion(HEADER_SIZE);
+        Preconditions.checkState(rootRegion == HEADER_POSITION, "regionMapper returned illegal root region");
+        MappedRegion rootBuffer = regionMapper.mapRegion(rootRegion, HEADER_SIZE);
         return new BTree<>(configuration, regionMapper, rootBuffer);
     }
 
     public static <K extends Comparable<K>, V> BTree<K, V> load(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper) {
-        MappedRegion rootPositionHolderBuffer = regionMapper.mapRegion(0);
+        MappedRegion rootPositionHolderBuffer = regionMapper.mapRegion(HEADER_POSITION, HEADER_SIZE);
         BTree<K, V> btree = new BTree<>(configuration, regionMapper, rootPositionHolderBuffer);
         long rootPosition = rootPositionHolderBuffer.getLong(0);
         if (rootPosition != LongLongBTreeSerializer.NO_VALUE) {
-            btree.root = Optional.of(new BTreeNode<>(configuration, regionMapper, regionMapper.mapRegion(rootPosition), rootPosition));
+            btree.root = Optional.of(BTreeNode.map(configuration, regionMapper, rootPosition));
         }
         return btree;
     }

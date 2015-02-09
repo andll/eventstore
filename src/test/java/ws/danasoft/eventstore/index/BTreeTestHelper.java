@@ -2,7 +2,7 @@ package ws.danasoft.eventstore.index;
 
 class BTreeTestHelper {
     static BTree<Long, Long> empty(BTreeNodeConfiguration<Long, Long> configuration) {
-        return BTree.createNew(configuration, new MemoryRegionMapper(configuration.elementSize()));
+        return BTree.createNew(configuration, new MemoryRegionMapper());
     }
 
     static BTree<Long, Long> generate(long from, long to, BTreeNodeConfiguration<Long, Long> configuration) {

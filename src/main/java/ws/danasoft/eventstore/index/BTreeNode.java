@@ -1,5 +1,6 @@
 package ws.danasoft.eventstore.index;
 
+import com.google.common.base.Preconditions;
 import com.google.gson.stream.JsonWriter;
 
 import java.io.IOException;
@@ -43,18 +44,27 @@ public class BTreeNode<K extends Comparable<K>, V> {
         nodes = new Lazy<>(this::_getNodes);
     }
 
+    /**
+     * assumes {@link BTreeNodeConfiguration#keyPosition()} is 0
+     */
     protected static <K extends Comparable<K>, V> BTreeNode<K, V> map(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, long position) {
-        MappedRegion region = regionMapper.mapRegion(position);
+        MappedRegion region;
+        if (regionMapper.getLong(position) == LongLongBTreeSerializer.NO_VALUE) {
+            region = regionMapper.mapRegion(position, configuration.nodeSize());
+        } else {
+            region = regionMapper.mapRegion(position, configuration.leafSize());
+        }
         return new BTreeNode<>(configuration, regionMapper, region, position);
     }
 
     /**
-     * assumes {@link FseekRegionMapper#mapRegion(long)} returns buffer with position 0
+     * assumes {@link FseekRegionMapper#mapRegion(long, int)} returns buffer with position 0
      * assumes {@link BTreeNodeConfiguration#keyPosition()} is 0
      */
     protected static <K extends Comparable<K>, V> BTreeNode<K, V> allocateNode(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper) {
-        long position = regionMapper.allocateRegion();
-        MappedRegion region = regionMapper.mapRegion(position);
+        int size = configuration.nodeSize();
+        long position = regionMapper.allocateRegion(size);
+        MappedRegion region = regionMapper.mapRegion(position, size);
         BTreeSerializer<K, V> serializer = configuration.getSerializer();
         serializer.writeKey(Optional.empty(), region);
         region.putLong(configuration.boundariesPosition(), LongLongBTreeSerializer.NO_VALUE);
@@ -64,18 +74,17 @@ public class BTreeNode<K extends Comparable<K>, V> {
     }
 
     /**
-     * assumes {@link FseekRegionMapper#mapRegion(long)} returns buffer with position 0
+     * assumes {@link FseekRegionMapper#mapRegion(long, int)} returns buffer with position 0
      * assumes {@link BTreeNodeConfiguration#keyPosition()} is 0
      * assumes {@link BTreeNodeConfiguration#valuePosition()} is keyPosition + valueSize
      */
     protected static <K extends Comparable<K>, V> BTreeNode<K, V> allocateLeaf(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, K key, V value) {
-        long position = regionMapper.allocateRegion();
-        MappedRegion region = regionMapper.mapRegion(position);
+        int size = configuration.leafSize();
+        long position = regionMapper.allocateRegion(size);
+        MappedRegion region = regionMapper.mapRegion(position, size);
         BTreeSerializer<K, V> serializer = configuration.getSerializer();
         serializer.writeKey(Optional.of(key), region);
         serializer.writeValue(value, region);
-        region.putLong(configuration.boundariesPosition(), LongLongBTreeSerializer.NO_VALUE);
-        region.putLong(configuration.nodesPosition(), LongLongBTreeSerializer.NO_VALUE);
         region.flush();
         return new BTreeNode<>(configuration, regionMapper, region, position);
     }
@@ -85,6 +94,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
     }
 
     private List<K> _getBoundaries() {
+        Preconditions.checkState(!isLeaf(), "Can not get boundaries for leaf");
         List<K> boundaries = new ArrayList<>(configuration.boundariesCapacity());
         buffer.position(configuration.boundariesPosition());
         BTreeSerializer<K, V> serializer = configuration.getSerializer();
@@ -103,6 +113,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
     }
 
     private List<BTreeNode<K, V>> _getNodes() {
+        Preconditions.checkState(!isLeaf(), "Can not get nodes for leaf");
         List<BTreeNode<K, V>> nodes = new ArrayList<>(configuration.nodesCapacity());
         buffer.position(configuration.nodesPosition());
         Optional<Long> reference;

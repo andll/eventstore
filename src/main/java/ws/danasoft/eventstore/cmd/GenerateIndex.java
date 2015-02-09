@@ -23,7 +23,7 @@ public class GenerateIndex {
         long to = Long.parseLong(args[2]);
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 new AggregatorValueUpdater<>(new Sum<>()), new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new MmapRegionMapper(file.toPath(), configuration.elementSize());
+        RegionMapper regionMapper = new MmapRegionMapper(file.toPath());
         BTree<Long, Long> bTree = BTree.createNew(configuration, regionMapper);
         for (long i = from; i <= to; i++) {
             bTree.put(i, i);

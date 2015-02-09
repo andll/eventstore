@@ -30,7 +30,7 @@ public class ReadIntegralSpeedTest {
         }
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 new AggregatorValueUpdater<>(new Sum<>()), new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new FseekRegionMapper(file.toPath(), configuration.elementSize());
+        RegionMapper regionMapper = new FseekRegionMapper(file.toPath());
         BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
         AggregationIndexReader<Long, Long> aggregationIndexReader = new AggregationIndexReader<>(bTree, new Sum<>());
         final Random random = new Random();

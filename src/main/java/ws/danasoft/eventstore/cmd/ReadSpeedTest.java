@@ -30,7 +30,7 @@ public class ReadSpeedTest {
         }
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 new AggregatorValueUpdater<>(new Sum<>()), new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new FseekRegionMapper(file.toPath(), configuration.elementSize());
+        RegionMapper regionMapper = new FseekRegionMapper(file.toPath());
         BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
         AggregationIndexReader<Long, Long> aggregationIndexReader = new AggregationIndexReader<>(bTree, new Sum<>());
         final Random random = new Random();
@@ -61,8 +61,8 @@ public class ReadSpeedTest {
         System.out.printf("%d ns per region evaluation%n", stopwatch.elapsed(TimeUnit.NANOSECONDS) / loops / regionCount);
         System.out.printf("Total: %s%n", stopwatch);
         System.out.printf("Visited nodes: %d(%d bytes), leafs: %d(%d bytes)%n",
-                nodesVisited, nodesVisited * configuration.elementSize(),
-                leafsVisited, leafsVisited * configuration.elementSize()
+                nodesVisited, nodesVisited * configuration.nodeSize(),
+                leafsVisited, leafsVisited * configuration.nodeSize()
         );
         System.out.printf("IO reads performed: %d (%d regions covered)%n", FseekMappedRegion.READS, FseekMappedRegion.REGIONS_READ.size());
     }

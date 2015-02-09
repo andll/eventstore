@@ -62,8 +62,8 @@ public class HttpHandler extends AbstractHandler {
 
     private BTree<Long, Long> generateSample() {
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(10, (x) -> 0l, new LongLongBTreeSerializer());
-        BTree<Long, Long> bTree = BTree.createNew(configuration, new MemoryRegionMapper(configuration.elementSize()));
-        GenerateIntegralIndex.generateTo(0, 10000, bTree);
+        BTree<Long, Long> bTree = BTree.createNew(configuration, new MemoryRegionMapper());
+        GenerateIntegralIndex.generateTo(0, 10000, bTree, GenerateIntegralIndex.Mode.RAND);
         return bTree;
     }
 
@@ -92,7 +92,7 @@ public class HttpHandler extends AbstractHandler {
                 }
                 try {
                     BTreeNodeConfiguration<Long, Long> configuration = loadConfiguration(configFile);
-                    BTree<Long, Long> bTree = BTree.load(configuration, new FseekRegionMapper(file.toPath(), configuration.elementSize()));
+                    BTree<Long, Long> bTree = BTree.load(configuration, new FseekRegionMapper(file.toPath()));
                     fileMap.put(name.substring(0, name.length() - BTREE_EXTENSION.length()), bTree);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to load file " + file, e);

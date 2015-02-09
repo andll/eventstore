@@ -180,7 +180,7 @@ public class HttpHandler extends AbstractHandler {
                     break;
                 }
                 long value = node.get().getValue() - prevNode.map(BTreeNode::getValue).orElse(0l);
-                emitter.data((index + prevIndex) / 2, value);
+                emitter.data((index + prevIndex) / 2, value / (index - prevIndex));
                 prevNode = node;
                 prevIndex = index;
             }

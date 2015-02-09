@@ -119,24 +119,26 @@ public class HttpHandler extends AbstractHandler {
         response.setHeader("Access-Control-Allow-Origin", "*");
         //TODO Access-Control-Allow-Method
 
-        switch (request.getMethod()) {
-            case "POST":
-                switch (request.getQueryString()) {
-                    case "query":
-                        handleQuery(bTree, baseRequest, response);
-                        return;
-                    default:
-                        response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unknown command");
-                }
-            case "OPTIONS":
-                return;
-            case "GET":
-            case "DELETE":
-            case "PUT":
-                response.sendError(HttpServletResponse.SC_FORBIDDEN);
-                return;
-            default:
-                response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+        synchronized (bTree) {
+            switch (request.getMethod()) {
+                case "POST":
+                    switch (request.getQueryString()) {
+                        case "query":
+                            handleQuery(bTree, baseRequest, response);
+                            return;
+                        default:
+                            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unknown command");
+                    }
+                case "OPTIONS":
+                    return;
+                case "GET":
+                case "DELETE":
+                case "PUT":
+                    response.sendError(HttpServletResponse.SC_FORBIDDEN);
+                    return;
+                default:
+                    response.sendError(HttpServletResponse.SC_METHOD_NOT_ALLOWED);
+            }
         }
     }
 

@@ -31,6 +31,8 @@ import java.util.Optional;
 public class HttpHandler extends AbstractHandler {
     private static final Logger LOGGER = LogManager.getLogger(HttpHandler.class);
     private static final Gson GSON = new Gson();
+    private static final String BTREE_EXTENSION = ".btree";
+    private static final String CONFIG_EXTENSION = ".config";
 
     public static void main(String[] args) throws Exception {
         int port = Integer.getInteger("port", 8080);
@@ -80,10 +82,10 @@ public class HttpHandler extends AbstractHandler {
             }
             String name = prefix + "/" + file.getName();
             if (file.isFile()) {
-                if (!file.getName().endsWith(".btree")) {
+                if (!file.getName().endsWith(BTREE_EXTENSION)) {
                     continue;
                 }
-                File configFile = new File(file + ".config");
+                File configFile = new File(file + CONFIG_EXTENSION);
                 if (!configFile.exists()) {
                     LOGGER.warn("Configuration file " + file + " does not exists");
                     continue;
@@ -91,7 +93,7 @@ public class HttpHandler extends AbstractHandler {
                 try {
                     BTreeNodeConfiguration<Long, Long> configuration = loadConfiguration(configFile);
                     BTree<Long, Long> bTree = BTree.load(configuration, new FseekRegionMapper(file.toPath(), configuration.elementSize()));
-                    fileMap.put(name, bTree);
+                    fileMap.put(name.substring(0, name.length() - BTREE_EXTENSION.length()), bTree);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to load file " + file, e);
                 }
@@ -105,8 +107,11 @@ public class HttpHandler extends AbstractHandler {
 
     @Override
     public void handle(String target, Request baseRequest, HttpServletRequest request, HttpServletResponse response) throws IOException, ServletException {
+        if (target.startsWith("/images")) {
+            return;
+        }
         baseRequest.setHandled(true);
-        BTree<Long, Long> bTree = fileMap.get(target);
+        BTree<Long, Long> bTree = fileMap.get(removeTrailing(target));
         if (bTree == null) {
             response.sendError(HttpServletResponse.SC_NOT_FOUND, "Sequence not found");
             return;
@@ -116,8 +121,13 @@ public class HttpHandler extends AbstractHandler {
 
         switch (request.getMethod()) {
             case "POST":
-                handleQuery(bTree, baseRequest, response);
-                return;
+                switch (request.getQueryString()) {
+                    case "query":
+                        handleQuery(bTree, baseRequest, response);
+                        return;
+                    default:
+                        response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Unknown command");
+                }
             case "OPTIONS":
                 return;
             case "GET":
@@ -130,11 +140,14 @@ public class HttpHandler extends AbstractHandler {
         }
     }
 
+    private static String removeTrailing(String target) {
+        if (target.endsWith("/")) {
+            return target.substring(0, target.length() - 1);
+        }
+        return target;
+    }
+
     private void handleQuery(BTree<Long, Long> bTree, Request request, HttpServletResponse response) throws IOException {
-//        if (!"application/json".equals(request.getContentType())) {
-//            response.sendError(HttpServletResponse.SC_UNSUPPORTED_MEDIA_TYPE, "Expected application/json content type");
-//            return;
-//        }
         QueryRequest queryRequest;
         try {
             try (JsonReader jsonReader = new JsonReader(request.getReader())) {

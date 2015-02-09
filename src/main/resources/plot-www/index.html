@@ -3,6 +3,7 @@
     <script type="text/javascript" src="//www.google.com/jsapi"></script>
     <script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
     <script type="text/javascript" src="jquery-ui.min.js"></script>
+    <script type="text/javascript" src="underscore-min.js"></script>
     <link rel="stylesheet" href="jquery-ui.min.css">
     <script type="text/javascript">
         google.load("visualization", "1", {packages: ["corechart"]});
@@ -14,20 +15,20 @@
                 curveType: 'function'
             };
             var chart = new google.visualization.LineChart(document.getElementById('chart'));
-            chart.draw(data, options)
+            chart.draw(data, options);
         }
-        function reload(from, to) {
+        var reload = _.throttle(function(from, to) {
             $("#amount").val(from + " - " + to);
             $.ajax({
                 type: "POST",
-                url: "/1G-integral-rand.btree",
+                url: "/sample/?query",
                 data: JSON.stringify({$from: from, $to: to, $groupsCount: 100, $emitter:"google_charts"}),
                 contentType: "application/json",
                 dataType: "json",
                 async: true,
                 success: draw
             });
-        }
+        }, 200);
         function startup() {
             reload(0, max);
         }

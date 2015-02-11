@@ -3,6 +3,9 @@ package ws.danasoft.eventstore.cmd;
 import com.google.common.collect.Range;
 import ws.danasoft.eventstore.index.*;
 import ws.danasoft.eventstore.math.Sum;
+import ws.danasoft.eventstore.storage.BlockStorage;
+import ws.danasoft.eventstore.storage.FileOpenMode;
+import ws.danasoft.eventstore.storage.FseekBlockStorage;
 
 import java.io.File;
 import java.io.IOException;
@@ -34,8 +37,8 @@ public class ReadIndex {
         }
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 new AggregatorValueUpdater<>(new Sum<>()), new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new FseekRegionMapper(file.toPath());
-        BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
+        BlockStorage blockStorage = FseekBlockStorage.open(file.toPath(), FileOpenMode.READ_ONLY);
+        BTree<Long, Long> bTree = BTree.load(configuration, blockStorage);
         AggregationIndexReader<Long, Long> aggregationIndexReader = new AggregationIndexReader<>(bTree, new Sum<>());
         System.out.println(aggregationIndexReader.evaluate(Range.closed(from, to)));
     }

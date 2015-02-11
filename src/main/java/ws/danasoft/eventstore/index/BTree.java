@@ -1,37 +1,36 @@
 package ws.danasoft.eventstore.index;
 
 import com.google.common.base.Preconditions;
+import ws.danasoft.eventstore.storage.BlockStorage;
 
 import java.util.Collections;
 import java.util.Optional;
 
 public class BTree<K extends Comparable<K>, V> {
-    private static final int HEADER_SIZE = 8;
-    private static final int HEADER_POSITION = 0;
     private final BTreeNodeConfiguration<K, V> configuration;
-    private final RegionMapper regionMapper;
+    private final BlockStorage blockStorage;
     private final MappedRegion rootPositionHolderBuffer;
     private Optional<BTreeNode<K, V>> root = Optional.empty();
 
-    private BTree(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, MappedRegion rootPositionHolderBuffer) {
+    private BTree(BTreeNodeConfiguration<K, V> configuration, BlockStorage blockStorage, MappedRegion rootPositionHolderBuffer) {
         this.configuration = configuration;
-        this.regionMapper = regionMapper;
+        this.blockStorage = blockStorage;
         this.rootPositionHolderBuffer = rootPositionHolderBuffer;
     }
 
-    public static <K extends Comparable<K>, V> BTree<K, V> createNew(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper) {
-        long rootRegion = regionMapper.allocateRegion(HEADER_SIZE);
-        Preconditions.checkState(rootRegion == HEADER_POSITION, "regionMapper returned illegal root region");
-        MappedRegion rootBuffer = regionMapper.mapRegion(rootRegion, HEADER_SIZE);
-        return new BTree<>(configuration, regionMapper, rootBuffer);
+    public static <K extends Comparable<K>, V> BTree<K, V> createNew(BTreeNodeConfiguration<K, V> configuration, BlockStorage blockStorage) {
+        long rootRegion = blockStorage.allocateRegion(BlockStorage.LONG_SIZE);
+        Preconditions.checkState(rootRegion == BlockStorage.FIRST_REGION_POSITION, "blockStorage returned illegal first region");
+        MappedRegion rootBuffer = blockStorage.mapRegion(rootRegion, BlockStorage.LONG_SIZE);
+        return new BTree<>(configuration, blockStorage, rootBuffer);
     }
 
-    public static <K extends Comparable<K>, V> BTree<K, V> load(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper) {
-        MappedRegion rootPositionHolderBuffer = regionMapper.mapRegion(HEADER_POSITION, HEADER_SIZE);
-        BTree<K, V> btree = new BTree<>(configuration, regionMapper, rootPositionHolderBuffer);
+    public static <K extends Comparable<K>, V> BTree<K, V> load(BTreeNodeConfiguration<K, V> configuration, BlockStorage blockStorage) {
+        MappedRegion rootPositionHolderBuffer = blockStorage.mapRegion(BlockStorage.FIRST_REGION_POSITION, BlockStorage.LONG_SIZE);
+        BTree<K, V> btree = new BTree<>(configuration, blockStorage, rootPositionHolderBuffer);
         long rootPosition = rootPositionHolderBuffer.getLong(0);
         if (rootPosition != LongLongBTreeSerializer.NO_VALUE) {
-            btree.root = Optional.of(BTreeNode.map(configuration, regionMapper, rootPosition));
+            btree.root = Optional.of(BTreeNode.map(configuration, blockStorage, rootPosition));
         }
         return btree;
     }
@@ -40,7 +39,7 @@ public class BTree<K extends Comparable<K>, V> {
         if (root.isPresent()) {
             updateRoot(root.get().add(key, value));
         } else {
-            updateRoot(BTreeNode.allocateLeaf(configuration, regionMapper, key, value));
+            updateRoot(BTreeNode.allocateLeaf(configuration, blockStorage, key, value));
         }
     }
 

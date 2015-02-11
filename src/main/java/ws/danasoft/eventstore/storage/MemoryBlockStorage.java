@@ -1,12 +1,18 @@
-package ws.danasoft.eventstore.index;
+package ws.danasoft.eventstore.storage;
+
+import ws.danasoft.eventstore.index.MappedRegion;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
-public class MemoryRegionMapper extends RegionMapper {
+public class MemoryBlockStorage extends BlockStorage {
     private final Map<Long, ByteBuffer> data = new HashMap<>();
+
+    public MemoryBlockStorage() {
+        init(true);
+    }
 
     @Override
     public MappedRegion mapRegion(long position, int size) {
@@ -32,5 +38,6 @@ public class MemoryRegionMapper extends RegionMapper {
 
     @Override
     public void close() throws IOException {
+        super.close();
     }
 }

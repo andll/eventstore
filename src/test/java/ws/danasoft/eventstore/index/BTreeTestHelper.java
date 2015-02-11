@@ -1,8 +1,10 @@
 package ws.danasoft.eventstore.index;
 
+import ws.danasoft.eventstore.storage.MemoryBlockStorage;
+
 class BTreeTestHelper {
     static BTree<Long, Long> empty(BTreeNodeConfiguration<Long, Long> configuration) {
-        return BTree.createNew(configuration, new MemoryRegionMapper());
+        return BTree.createNew(configuration, new MemoryBlockStorage());
     }
 
     static BTree<Long, Long> generate(long from, long to, BTreeNodeConfiguration<Long, Long> configuration) {

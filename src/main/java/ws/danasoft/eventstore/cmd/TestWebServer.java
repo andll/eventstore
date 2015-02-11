@@ -5,6 +5,9 @@ import org.eclipse.jetty.server.Request;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.AbstractHandler;
 import ws.danasoft.eventstore.index.*;
+import ws.danasoft.eventstore.storage.BlockStorage;
+import ws.danasoft.eventstore.storage.FileOpenMode;
+import ws.danasoft.eventstore.storage.FseekBlockStorage;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -30,8 +33,8 @@ public class TestWebServer {
         }
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 (x) -> 0l, new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new FseekRegionMapper(file.toPath());
-        BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
+        BlockStorage blockStorage = FseekBlockStorage.open(file.toPath(), FileOpenMode.READ_ONLY);
+        BTree<Long, Long> bTree = BTree.load(configuration, blockStorage);
         Server server = new Server(port);
         server.setHandler(new AbstractHandler() {
             @Override

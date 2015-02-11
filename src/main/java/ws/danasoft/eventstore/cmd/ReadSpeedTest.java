@@ -4,6 +4,9 @@ import com.google.common.base.Stopwatch;
 import com.google.common.collect.Range;
 import ws.danasoft.eventstore.index.*;
 import ws.danasoft.eventstore.math.Sum;
+import ws.danasoft.eventstore.storage.*;
+import ws.danasoft.eventstore.storage.FseekBlockStorage;
+import ws.danasoft.eventstore.storage.BlockStorage;
 
 import java.io.File;
 import java.io.IOException;
@@ -30,8 +33,8 @@ public class ReadSpeedTest {
         }
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 new AggregatorValueUpdater<>(new Sum<>()), new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new FseekRegionMapper(file.toPath());
-        BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
+        BlockStorage blockStorage = FseekBlockStorage.open(file.toPath(), FileOpenMode.READ_ONLY);
+        BTree<Long, Long> bTree = BTree.load(configuration, blockStorage);
         AggregationIndexReader<Long, Long> aggregationIndexReader = new AggregationIndexReader<>(bTree, new Sum<>());
         final Random random = new Random();
         System.out.println("Warming up with " + loops / 10 + " loops");

@@ -2,6 +2,7 @@ package ws.danasoft.eventstore.index;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.stream.JsonWriter;
+import ws.danasoft.eventstore.storage.BlockStorage;
 
 import java.io.IOException;
 import java.io.StringWriter;
@@ -18,7 +19,7 @@ import java.util.function.Supplier;
  */
 public class BTreeNode<K extends Comparable<K>, V> {
     private final BTreeNodeConfiguration<K, V> configuration;
-    private final RegionMapper regionMapper;
+    private final BlockStorage blockStorage;
     private final MappedRegion buffer;
     private final long position;
 
@@ -27,8 +28,8 @@ public class BTreeNode<K extends Comparable<K>, V> {
     private final Lazy<List<K>> boundaries;
     private final Lazy<List<BTreeNode<K, V>>> nodes;
 
-    protected BTreeNode(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, MappedRegion buffer, long position) {
-        this.regionMapper = regionMapper;
+    protected BTreeNode(BTreeNodeConfiguration<K, V> configuration, BlockStorage blockStorage, MappedRegion buffer, long position) {
+        this.blockStorage = blockStorage;
         this.buffer = buffer;
         this.configuration = configuration;
         this.position = position;
@@ -47,46 +48,46 @@ public class BTreeNode<K extends Comparable<K>, V> {
     /**
      * assumes {@link BTreeNodeConfiguration#keyPosition()} is 0
      */
-    protected static <K extends Comparable<K>, V> BTreeNode<K, V> map(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, long position) {
+    protected static <K extends Comparable<K>, V> BTreeNode<K, V> map(BTreeNodeConfiguration<K, V> configuration, BlockStorage blockStorage, long position) {
         MappedRegion region;
-        if (regionMapper.getLong(position) == LongLongBTreeSerializer.NO_VALUE) {
-            region = regionMapper.mapRegion(position, configuration.nodeSize());
+        if (blockStorage.getLong(position) == LongLongBTreeSerializer.NO_VALUE) {
+            region = blockStorage.mapRegion(position, configuration.nodeSize());
         } else {
-            region = regionMapper.mapRegion(position, configuration.leafSize());
+            region = blockStorage.mapRegion(position, configuration.leafSize());
         }
-        return new BTreeNode<>(configuration, regionMapper, region, position);
+        return new BTreeNode<>(configuration, blockStorage, region, position);
     }
 
     /**
-     * assumes {@link FseekRegionMapper#mapRegion(long, int)} returns buffer with position 0
+     * assumes {@link ws.danasoft.eventstore.storage.FseekBlockStorage#mapRegion(long, int)} returns buffer with position 0
      * assumes {@link BTreeNodeConfiguration#keyPosition()} is 0
      */
-    protected static <K extends Comparable<K>, V> BTreeNode<K, V> allocateNode(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper) {
+    protected static <K extends Comparable<K>, V> BTreeNode<K, V> allocateNode(BTreeNodeConfiguration<K, V> configuration, BlockStorage blockStorage) {
         int size = configuration.nodeSize();
-        long position = regionMapper.allocateRegion(size);
-        MappedRegion region = regionMapper.mapRegion(position, size);
+        long position = blockStorage.allocateRegion(size);
+        MappedRegion region = blockStorage.mapRegion(position, size);
         BTreeSerializer<K, V> serializer = configuration.getSerializer();
         serializer.writeKey(Optional.empty(), region);
         region.putLong(configuration.boundariesPosition(), LongLongBTreeSerializer.NO_VALUE);
         region.putLong(configuration.nodesPosition(), LongLongBTreeSerializer.NO_VALUE);
         region.flush();
-        return new BTreeNode<>(configuration, regionMapper, region, position);
+        return new BTreeNode<>(configuration, blockStorage, region, position);
     }
 
     /**
-     * assumes {@link FseekRegionMapper#mapRegion(long, int)} returns buffer with position 0
+     * assumes {@link ws.danasoft.eventstore.storage.FseekBlockStorage#mapRegion(long, int)} returns buffer with position 0
      * assumes {@link BTreeNodeConfiguration#keyPosition()} is 0
      * assumes {@link BTreeNodeConfiguration#valuePosition()} is keyPosition + valueSize
      */
-    protected static <K extends Comparable<K>, V> BTreeNode<K, V> allocateLeaf(BTreeNodeConfiguration<K, V> configuration, RegionMapper regionMapper, K key, V value) {
+    protected static <K extends Comparable<K>, V> BTreeNode<K, V> allocateLeaf(BTreeNodeConfiguration<K, V> configuration, BlockStorage blockStorage, K key, V value) {
         int size = configuration.leafSize();
-        long position = regionMapper.allocateRegion(size);
-        MappedRegion region = regionMapper.mapRegion(position, size);
+        long position = blockStorage.allocateRegion(size);
+        MappedRegion region = blockStorage.mapRegion(position, size);
         BTreeSerializer<K, V> serializer = configuration.getSerializer();
         serializer.writeKey(Optional.of(key), region);
         serializer.writeValue(value, region);
         region.flush();
-        return new BTreeNode<>(configuration, regionMapper, region, position);
+        return new BTreeNode<>(configuration, blockStorage, region, position);
     }
 
     public final List<K> getBoundaries() {
@@ -118,7 +119,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
         buffer.position(configuration.nodesPosition());
         Optional<Long> reference;
         while ((reference = LongLongBTreeSerializer.readOptionalLong(buffer)).isPresent()) {
-            nodes.add(map(configuration, regionMapper, reference.get()));
+            nodes.add(map(configuration, blockStorage, reference.get()));
             if (nodes.size() == configuration.nodesCapacity()) {
                 break;
             }
@@ -130,7 +131,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
     public BTreeNode<K, V> getNode(int index) {
         buffer.position(configuration.nodePosition(index));
         Optional<Long> reference = LongLongBTreeSerializer.readOptionalLong(buffer);
-        return map(configuration, regionMapper, reference.get());
+        return map(configuration, blockStorage, reference.get());
     }
 
     BTreeNode<K, V> add(K key, V value) {
@@ -141,7 +142,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
         BTreeNode<K, V> b = o.get().node;
         assert lowerKey().compareTo(b.lowerKey()) < 0 :
                 "Can not compose new node from keys " + lowerKey() + "," + b.lowerKey();
-        BTreeNode<K, V> node = allocateNode(configuration, regionMapper);
+        BTreeNode<K, V> node = allocateNode(configuration, blockStorage);
         BTreeSerializer<K, V> serializer = configuration.getSerializer();
         node.buffer.position(configuration.boundariesPosition());
         serializer.writeKey(Optional.of(o.get().key), node.buffer);
@@ -215,7 +216,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
             List<BTreeNode<K, V>> nodesLeftHalf = nodes.subList(middleIndex, nodes.size());
             newNodes.addAll(nodesLeftHalf);
             nodesLeftHalf.clear();
-            BTreeNode<K, V> splitTo = allocateNode(configuration, regionMapper);
+            BTreeNode<K, V> splitTo = allocateNode(configuration, blockStorage);
             splitTo.boundaries.reset(newBoundaries);
             splitTo.nodes.reset(newNodes);
             splitTo.flushNodesAndBoundaries(newBoundaries, newNodes);
@@ -253,7 +254,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
     }
 
     private BTreeNode<K, V> newLeaf(K key, V value) {
-        return allocateLeaf(configuration, regionMapper, key, value);
+        return allocateLeaf(configuration, blockStorage, key, value);
     }
 
     public boolean isLeaf() {
@@ -376,7 +377,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
 
         if (position != bTreeNode.position) return false;
         if (!configuration.equals(bTreeNode.configuration)) return false;
-        if (!regionMapper.equals(bTreeNode.regionMapper)) return false;
+        if (!blockStorage.equals(bTreeNode.blockStorage)) return false;
 
         return true;
     }
@@ -384,7 +385,7 @@ public class BTreeNode<K extends Comparable<K>, V> {
     @Override
     public int hashCode() {
         int result = configuration.hashCode();
-        result = 31 * result + regionMapper.hashCode();
+        result = 31 * result + blockStorage.hashCode();
         result = 31 * result + (int) (position ^ (position >>> 32));
         return result;
     }

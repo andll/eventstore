@@ -1,16 +1,29 @@
-package ws.danasoft.eventstore.index;
+package ws.danasoft.eventstore.storage;
+
+import ws.danasoft.eventstore.index.MappedRegion;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 
-public class FseekRegionMapper extends RegionMapper {
+public class FseekBlockStorage extends BlockStorage {
     private final FileChannel channel;
 
-    public FseekRegionMapper(Path path) throws IOException {
-        channel = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
+    private FseekBlockStorage(FileChannel channel) {
+        this.channel = channel;
+    }
+
+    public static FseekBlockStorage open(Path path, FileOpenMode mode) throws IOException {
+        FseekBlockStorage storage = new FseekBlockStorage(mode.createFileChannel(path));
+        storage.init(false);
+        return storage;
+    }
+
+    public static FseekBlockStorage create(Path path) throws IOException {
+        FseekBlockStorage storage = new FseekBlockStorage(FileOpenMode.READ_WRITE.createFileChannel(path));
+        storage.init(true);
+        return storage;
     }
 
     @Override
@@ -34,6 +47,7 @@ public class FseekRegionMapper extends RegionMapper {
 
     @Override
     public void close() throws IOException {
+        super.close();
         channel.close();
     }
 }

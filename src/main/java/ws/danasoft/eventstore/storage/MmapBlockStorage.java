@@ -1,20 +1,35 @@
-package ws.danasoft.eventstore.index;
+package ws.danasoft.eventstore.storage;
+
+import ws.danasoft.eventstore.index.MappedRegion;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.HashMap;
 import java.util.Map;
 
-public class MmapRegionMapper extends RegionMapper {
+public class MmapBlockStorage extends BlockStorage {
     private final FileChannel channel;
+    private final FileChannel.MapMode mapMode;
     private final Map<Long, MappedByteBuffer> mappedBuffers = new HashMap<>();
 
-    public MmapRegionMapper(Path path) throws IOException {
-        channel = FileChannel.open(path, StandardOpenOption.CREATE, StandardOpenOption.READ, StandardOpenOption.WRITE);
+    private MmapBlockStorage(FileChannel channel, FileChannel.MapMode mapMode) {
+        this.channel = channel;
+        this.mapMode = mapMode;
+    }
+
+    public static MmapBlockStorage open(Path path, FileOpenMode mode) throws IOException {
+        MmapBlockStorage storage = new MmapBlockStorage(mode.createFileChannel(path), toMapMode(mode));
+        storage.init(false);
+        return storage;
+    }
+
+    public static MmapBlockStorage create(Path path) throws IOException {
+        MmapBlockStorage storage = new MmapBlockStorage(FileOpenMode.READ_WRITE.createFileChannel(path), FileChannel.MapMode.READ_WRITE);
+        storage.init(true);
+        return storage;
     }
 
     @Override
@@ -43,7 +58,7 @@ public class MmapRegionMapper extends RegionMapper {
         MappedByteBuffer mappedBuffer = mappedBuffers.get(chunk);
         if (mappedBuffer == null) {
             try {
-                mappedBuffers.put(chunk, mappedBuffer = channel.map(FileChannel.MapMode.READ_WRITE, chunk * CHUNK_SIZE, CHUNK_SIZE));
+                mappedBuffers.put(chunk, mappedBuffer = channel.map(mapMode, chunk * CHUNK_SIZE, CHUNK_SIZE));
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }
@@ -53,9 +68,21 @@ public class MmapRegionMapper extends RegionMapper {
 
     @Override
     public void close() throws IOException {
+        super.close();
         for (MappedByteBuffer mappedBuffer : mappedBuffers.values()) {
             mappedBuffer.force();
         }
         channel.close();
+    }
+
+    private static FileChannel.MapMode toMapMode(FileOpenMode mode) {
+        switch (mode) {
+            case READ_ONLY:
+                return FileChannel.MapMode.READ_ONLY;
+            case READ_WRITE:
+                return FileChannel.MapMode.READ_WRITE;
+            default:
+                throw new IllegalArgumentException("Unknown file open mode: " + mode);
+        }
     }
 }

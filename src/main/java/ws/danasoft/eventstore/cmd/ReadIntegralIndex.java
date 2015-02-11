@@ -1,6 +1,9 @@
 package ws.danasoft.eventstore.cmd;
 
 import ws.danasoft.eventstore.index.*;
+import ws.danasoft.eventstore.storage.BlockStorage;
+import ws.danasoft.eventstore.storage.FileOpenMode;
+import ws.danasoft.eventstore.storage.FseekBlockStorage;
 
 import java.io.File;
 import java.io.IOException;
@@ -33,8 +36,8 @@ public class ReadIntegralIndex {
         }
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 (x) -> 0l, new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new FseekRegionMapper(file.toPath());
-        BTree<Long, Long> bTree = BTree.load(configuration, regionMapper);
+        BlockStorage blockStorage = FseekBlockStorage.open(file.toPath(), FileOpenMode.READ_ONLY);
+        BTree<Long, Long> bTree = BTree.load(configuration, blockStorage);
         Optional<BTreeNode<Long, Long>> nodeFrom = bTree.lookup(from - 1);
         Optional<BTreeNode<Long, Long>> nodeTo = bTree.lookup(to);
         if (!nodeTo.isPresent()) {

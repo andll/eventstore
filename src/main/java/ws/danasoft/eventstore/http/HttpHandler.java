@@ -17,6 +17,9 @@ import org.eclipse.jetty.util.resource.Resource;
 import ws.danasoft.eventstore.cmd.GenerateIntegralIndex;
 import ws.danasoft.eventstore.http.responseEmitter.ResponseEmitter;
 import ws.danasoft.eventstore.index.*;
+import ws.danasoft.eventstore.storage.FileOpenMode;
+import ws.danasoft.eventstore.storage.FseekBlockStorage;
+import ws.danasoft.eventstore.storage.MemoryBlockStorage;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletRequest;
@@ -62,7 +65,7 @@ public class HttpHandler extends AbstractHandler {
 
     private BTree<Long, Long> generateSample() {
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(10, (x) -> 0l, new LongLongBTreeSerializer());
-        BTree<Long, Long> bTree = BTree.createNew(configuration, new MemoryRegionMapper());
+        BTree<Long, Long> bTree = BTree.createNew(configuration, new MemoryBlockStorage());
         GenerateIntegralIndex.generateTo(0, 10000, bTree, GenerateIntegralIndex.Mode.RAND);
         return bTree;
     }
@@ -92,7 +95,7 @@ public class HttpHandler extends AbstractHandler {
                 }
                 try {
                     BTreeNodeConfiguration<Long, Long> configuration = loadConfiguration(configFile);
-                    BTree<Long, Long> bTree = BTree.load(configuration, new FseekRegionMapper(file.toPath()));
+                    BTree<Long, Long> bTree = BTree.load(configuration, FseekBlockStorage.open(file.toPath(), FileOpenMode.READ_ONLY));
                     fileMap.put(name.substring(0, name.length() - BTREE_EXTENSION.length()), bTree);
                 } catch (IOException e) {
                     throw new RuntimeException("Failed to load file " + file, e);

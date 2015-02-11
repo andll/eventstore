@@ -1,4 +1,6 @@
-package ws.danasoft.eventstore.index;
+package ws.danasoft.eventstore.storage;
+
+import ws.danasoft.eventstore.index.MappedRegion;
 
 import java.nio.ByteBuffer;
 

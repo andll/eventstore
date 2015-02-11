@@ -142,37 +142,4 @@ public class BTreeTest {
     private static double logMaxBoundaries(double x) {
         return Math.log(x) / Math.log(MAX_BOUNDARIES);
     }
-
-    //
-//    private static BTreeNode<Long, Long> leaf(long key, long value) {
-//        return new BTreeNode<>(CONFIGURATION, regionMapper, buffer, Optional.of(key), value);
-//    }
-//
-//    private static BTreeNode<Long, Long> tree(ArrayList<Long> boundaries, ArrayList<BTreeNode<Long, Long>> nodes) {
-//        return new BTreeNode<>(CONFIGURATION, regionMapper, buffer, boundaries, nodes);
-//    }
-//
-//    private static BTree<Long, Long> tree(BTreeNode<Long, Long> root) {
-//        return new BTree<>(root);
-//    }
-//
-//    private static BTree<Long, Long> twoNodesTree() {
-//        return tree(tree(boundaries(3l), nodes(leaf(1, 2), leaf(3, 4))));
-//    }
-//
-//    public static ArrayList<Long> boundaries(long... x) {
-//        ArrayList<Long> r = new ArrayList<>(x.length);
-//        for (long v : x) {
-//            r.add(v);
-//        }
-//        return r;
-//    }
-//
-//    public static ArrayList<BTreeNode<Long, Long>> nodes(BTreeNode<Long, Long>... x) {
-//        ArrayList<BTreeNode<Long, Long>> r = new ArrayList<>(x.length);
-//        for (BTreeNode<Long, Long> v : x) {
-//            r.add(v);
-//        }
-//        return r;
-//    }
 }

@@ -1,6 +1,8 @@
 package ws.danasoft.eventstore.cmd;
 
 import ws.danasoft.eventstore.index.*;
+import ws.danasoft.eventstore.storage.BlockStorage;
+import ws.danasoft.eventstore.storage.MmapBlockStorage;
 
 import java.io.File;
 import java.io.IOException;
@@ -24,10 +26,10 @@ public class GenerateIntegralIndex {
         Mode mode = Mode.valueOf(args[3].toUpperCase());
         BTreeNodeConfiguration<Long, Long> configuration = new BTreeNodeConfiguration<>(MAX_BOUNDARIES,
                 (x) -> 0l, new LongLongBTreeSerializer());
-        RegionMapper regionMapper = new MmapRegionMapper(file.toPath());
-        BTree<Long, Long> bTree = BTree.createNew(configuration, regionMapper);
+        BlockStorage blockStorage = MmapBlockStorage.create(file.toPath());
+        BTree<Long, Long> bTree = BTree.createNew(configuration, blockStorage);
         generateTo(from, to, bTree, mode);
-        regionMapper.close();
+        blockStorage.close();
     }
 
     public static void generateTo(long from, long to, BTree<Long, Long> bTree, Mode mode) {

@@ -1,6 +1,7 @@
 package ws.danasoft.eventstore.http;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Range;
 import com.google.gson.Gson;
 import com.google.gson.TypeAdapter;
 import com.google.gson.annotations.SerializedName;
@@ -16,7 +17,10 @@ import org.eclipse.jetty.server.handler.ResourceHandler;
 import org.eclipse.jetty.util.resource.Resource;
 import ws.danasoft.eventstore.cmd.GenerateIntegralIndex;
 import ws.danasoft.eventstore.http.responseEmitter.ResponseEmitter;
-import ws.danasoft.eventstore.index.*;
+import ws.danasoft.eventstore.index.BTree;
+import ws.danasoft.eventstore.index.BTreeNode;
+import ws.danasoft.eventstore.index.BTreeNodeConfiguration;
+import ws.danasoft.eventstore.index.LongLongBTreeSerializer;
 import ws.danasoft.eventstore.storage.FileOpenMode;
 import ws.danasoft.eventstore.storage.FseekBlockStorage;
 import ws.danasoft.eventstore.storage.MemoryBlockStorage;
@@ -178,14 +182,22 @@ public class HttpHandler extends AbstractHandler {
         try (ResponseEmitter emitter = ResponseEmitter.of(Optional.ofNullable(queryRequest.emitter))) {
             emitter.init(response);
             emitter.headers("Data");
+            long step = (queryRequest.to - queryRequest.from) / queryRequest.groupsCount;
             for (long i = 1; i <= queryRequest.groupsCount; i++) {
-                long index = queryRequest.from + (queryRequest.to - queryRequest.from) / queryRequest.groupsCount * i;
+                long index = queryRequest.from + step * i;
                 Optional<BTreeNode<Long, Long>> node = bTree.lookup(index);
                 if (!node.isPresent()) {
                     break;
                 }
                 long value = node.get().getValue() - prevNode.map(BTreeNode::getValue).orElse(0l);
-                emitter.data((index + prevIndex) / 2, value / (index - prevIndex));
+                Optional<Range<Long>> range;
+                if (step > 1) {
+                    range = Optional.of(Range.openClosed(prevIndex, index));
+                } else {
+                    range = Optional.empty();
+                }
+                ResponseEmitter.Point point = new ResponseEmitter.Point((index + prevIndex) / 2, value / (index - prevIndex), range);
+                emitter.data(point);
                 prevNode = node;
                 prevIndex = index;
             }

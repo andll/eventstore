@@ -1,55 +1,14 @@
 <html>
 <head>
-    <script type="text/javascript" src="//www.google.com/jsapi"></script>
-    <script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
-    <script type="text/javascript" src="jquery-ui.min.js"></script>
-    <script type="text/javascript" src="underscore-min.js"></script>
-    <link rel="stylesheet" href="jquery-ui.min.css">
-    <script type="text/javascript">
-        google.load("visualization", "1", {packages: ["corechart"]});
-        google.setOnLoadCallback(startup);
-        var max = 1000000000;
-        function draw(textData) {
-            var data = new google.visualization.DataTable(JSON.stringify(textData));
-            var options = {
-                curveType: 'function'
-            };
-            var chart = new google.visualization.LineChart(document.getElementById('chart'));
-            chart.draw(data, options);
-        }
-        var reload = _.throttle(function(from, to) {
-            $("#amount").val(from + " - " + to);
-            $.ajax({
-                type: "POST",
-                url: "/sample/?query",
-                data: JSON.stringify({$from: from, $to: to, $groupsCount: 100, $emitter:"google_charts"}),
-                contentType: "application/json",
-                dataType: "json",
-                async: true,
-                success: draw
-            });
-        }, 200);
-        function startup() {
-            reload(0, max);
-        }
-        $(function() {
-            $("#slider-range").slider({
-                  range: true,
-                  min: 0,
-                  max: max,
-                  values: [0, max],
-                  slide: function(event, ui) {
-                    var from = ui.values[0];
-                    var to = ui.values[1];
-                    reload(from, to);
-                  }
-                });
-            });
-    </script>
 </head>
 <body>
-<div id="chart" style="width: 600px; height: 400px;"></div>
-<div id="slider-range" style="width:600px"></div>
-<input type="text" id="amount" readonly style="width:600px; border:0; color:#f6931f; font-weight:bold;">
+<canvas id="large_canvas" width="800" height="500"></canvas>
+<br/>
+<canvas id="small_canvas" width="800" height="200"></canvas>
+<script type="text/javascript" src="Chart.js"></script>
+<script type="text/javascript" src="underscore-min.js"></script>
+<script type="text/javascript" src="dateformat.js"></script>
+<script type="text/javascript" src="//ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+<script type="text/javascript" src="plot.js"></script>
 </body>
 </html>

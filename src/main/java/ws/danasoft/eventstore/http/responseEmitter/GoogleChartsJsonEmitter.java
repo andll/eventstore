@@ -15,11 +15,11 @@ public class GoogleChartsJsonEmitter extends JsonEmitter {
     }
 
     @Override
-    public void data(long k, long v) throws IOException {
+    public void data(Point point) throws IOException {
         jsonWriter.beginObject().name("c");
         jsonWriter.beginArray();
-        jsonWriter.beginObject().name("v").value(k).endObject();
-        jsonWriter.beginObject().name("v").value(v).endObject();
+        jsonWriter.beginObject().name("v").value(point.getKey()).endObject();
+        jsonWriter.beginObject().name("v").value(point.getValue()).endObject();
         jsonWriter.endArray();
         jsonWriter.endObject();
     }
